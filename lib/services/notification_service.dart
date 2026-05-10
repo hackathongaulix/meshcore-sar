@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -29,6 +31,13 @@ class NotificationService {
   bool _muteForegroundNotifications = true;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   String? _launchPayload;
+  Timer? _messageNotificationTimer;
+  int _pendingMessageNotificationCount = 0;
+  String? _pendingMessageSenderName;
+  String? _pendingMessageText;
+  bool _pendingMessageIsChannel = false;
+  String? _pendingMessageChannelName;
+  AppLocalizations? _pendingMessageLocalizations;
 
   // Notification IDs
   static const int _sarNotificationId = 1000;
@@ -36,6 +45,8 @@ class NotificationService {
   static const int _updateNotificationId = 3000;
   static const int _batteryNotificationId = 4000;
   static const int _discoveryNotificationId = 5000;
+  static const Duration _messageNotificationCoalesceWindow =
+      Duration(seconds: 2);
 
   // Notification channels
   static const String _urgentChannelId = 'sar_urgent';
@@ -533,17 +544,53 @@ class NotificationService {
       return;
     }
 
-    try {
-      // Generate unique notification ID based on timestamp
-      final notificationId =
-          _messageNotificationId +
-          (DateTime.now().millisecondsSinceEpoch % 1000);
+    _pendingMessageNotificationCount++;
+    _pendingMessageSenderName = senderName;
+    _pendingMessageText = messageText;
+    _pendingMessageIsChannel = isChannelMessage;
+    _pendingMessageChannelName = channelName;
+    _pendingMessageLocalizations = localizations;
 
+    _messageNotificationTimer?.cancel();
+    _messageNotificationTimer = Timer(_messageNotificationCoalesceWindow, () {
+      unawaited(_flushMessageNotification());
+    });
+  }
+
+  Future<void> _flushMessageNotification() async {
+    final count = _pendingMessageNotificationCount;
+    final senderName = _pendingMessageSenderName;
+    final messageText = _pendingMessageText;
+    final isChannelMessage = _pendingMessageIsChannel;
+    final channelName = _pendingMessageChannelName;
+    final localizations = _pendingMessageLocalizations;
+
+    _pendingMessageNotificationCount = 0;
+    _pendingMessageSenderName = null;
+    _pendingMessageText = null;
+    _pendingMessageIsChannel = false;
+    _pendingMessageChannelName = null;
+    _pendingMessageLocalizations = null;
+
+    if (count == 0 || senderName == null || messageText == null) {
+      return;
+    }
+
+    if (!_isInitialized ||
+        !_permissionGranted ||
+        !_messageNotificationsEnabled ||
+        _shouldSuppressForegroundNotifications()) {
+      return;
+    }
+
+    try {
       // Build notification title and body
       final resolvedChannelName = channelName?.trim().isNotEmpty == true
           ? channelName!.trim()
           : (localizations?.publicChannel ?? 'Public');
-      final title = isChannelMessage
+      final title = count > 1
+          ? (localizations?.messages ?? 'Messages')
+          : isChannelMessage
           ? (localizations != null
                 ? '${localizations.channel}: $resolvedChannelName'
                 : 'Channel: $resolvedChannelName')
@@ -551,7 +598,9 @@ class NotificationService {
                 ? '${localizations.newMessage} ${localizations.from} $senderName'
                 : 'New message from $senderName');
 
-      final body = messageText.length > 200
+      final body = count > 1
+          ? 'You have $count new messages'
+          : messageText.length > 200
           ? '${messageText.substring(0, 200)}...'
           : messageText;
 
@@ -570,7 +619,7 @@ class NotificationService {
         styleInformation: BigTextStyleInformation(
           body,
           contentTitle: title,
-          summaryText: senderName,
+          summaryText: count > 1 ? body : senderName,
         ),
       );
 
@@ -594,7 +643,7 @@ class NotificationService {
 
       // Show notification
       await _notificationsPlugin.show(
-        id: notificationId,
+        id: _messageNotificationId,
         title: title,
         body: body,
         notificationDetails: notificationDetails,
@@ -602,6 +651,7 @@ class NotificationService {
       );
 
       debugPrint('✅ [NotificationService] Showed message notification');
+      debugPrint('   Count: $count');
       debugPrint('   Sender: $senderName');
       debugPrint('   Type: ${isChannelMessage ? "Channel" : "Direct"}');
     } catch (e) {

@@ -2567,8 +2567,11 @@ class AppProvider with ChangeNotifier {
       debugPrint(
         '🔄 [AppProvider] Performing initial message sync (fallback for missed pushes)',
       );
-      final initialMessageCount = await connectionProvider.syncAllMessages(
-        force: true,
+      final initialMessageCount =
+          await messagesProvider.withReceivedNotificationsSuppressed(
+        () => connectionProvider.syncAllMessages(
+          force: true,
+        ),
       );
       debugPrint(
         '📥 [AppProvider] Initial sync retrieved $initialMessageCount message(s)',
@@ -2627,8 +2630,11 @@ class AppProvider with ChangeNotifier {
       );
       await refreshChannelLocationSharingState();
 
-      final messageCount = await connectionProvider.syncAllMessages(
-        force: true,
+      final messageCount =
+          await messagesProvider.withReceivedNotificationsSuppressed(
+        () => connectionProvider.syncAllMessages(
+          force: true,
+        ),
       );
       debugPrint(
         '📥 [AppProvider] Reconnect sync retrieved $messageCount message(s)',

@@ -36,6 +36,7 @@ class MessagesProvider with ChangeNotifier {
   bool _isInitialized = false;
   bool _isPersisting = false;
   bool _persistRequested = false;
+  bool _suppressReceivedNotifications = false;
   AppLocalizations? _localizations;
   final Map<String, MessageContactLocation> _messageContactLocations = {};
   final Map<String, MessageReceptionDetails> _messageReceptionDetails = {};
@@ -850,11 +851,13 @@ class MessagesProvider with ChangeNotifier {
         _sarMarkers[marker.id] = marker;
 
         // Trigger urgent notification for received SAR messages (not sent by user)
-        if (!finalMessage.isSentMessage) {
+        if (!finalMessage.isSentMessage && !_suppressReceivedNotifications) {
           _triggerSarNotification(finalMessage, marker);
         }
       }
-    } else if (!finalMessage.isSentMessage && !finalMessage.isSystemMessage) {
+    } else if (!finalMessage.isSentMessage &&
+        !finalMessage.isSystemMessage &&
+        !_suppressReceivedNotifications) {
       // Trigger notification for regular messages (not SAR, not sent by user, not system)
       _triggerMessageNotification(finalMessage);
     }
@@ -863,6 +866,18 @@ class MessagesProvider with ChangeNotifier {
     _persistMessages();
 
     notifyListeners();
+  }
+
+  Future<T> withReceivedNotificationsSuppressed<T>(
+    Future<T> Function() action,
+  ) async {
+    final previous = _suppressReceivedNotifications;
+    _suppressReceivedNotifications = true;
+    try {
+      return await action();
+    } finally {
+      _suppressReceivedNotifications = previous;
+    }
   }
 
   /// Check if a message is a duplicate
