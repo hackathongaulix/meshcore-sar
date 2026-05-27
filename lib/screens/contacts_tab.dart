@@ -38,6 +38,9 @@ class ContactsTab extends StatefulWidget {
 }
 
 class _ContactsTabState extends State<ContactsTab> {
+  static const bool _isScreenshotRun = bool.fromEnvironment(
+    'MESHCORE_SCREENSHOTS',
+  );
   Position? _currentPosition;
   final Map<ContactSection, String> _sectionFilters = {
     ContactSection.teamMembers: '',
@@ -62,7 +65,9 @@ class _ContactsTabState extends State<ContactsTab> {
       for (final section in ContactSection.values)
         section: TextEditingController(text: _sectionFilters[section] ?? ''),
     };
-    _getCurrentLocation();
+    if (!_isScreenshotRun) {
+      _getCurrentLocation();
+    }
     // Mark all contacts as viewed when tab is opened
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactsProvider>().markAllAsViewed();

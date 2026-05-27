@@ -11,6 +11,7 @@ class VoicePlayerService {
   final AudioPlayer _player = AudioPlayer();
   final StreamController<void> _events = StreamController<void>.broadcast();
   bool _isPlaying = false;
+  bool _isDisposed = false;
   Duration _position = Duration.zero;
   Duration _duration = Duration.zero;
   Timer? _fallbackTicker;
@@ -30,22 +31,22 @@ class VoicePlayerService {
       } else {
         _stopFallbackTicker();
       }
-      _events.add(null);
+      _emit();
     });
     _player.onLog.listen((msg) => debugPrint('🔊 [VoicePlayer] log: $msg'));
     _player.onPositionChanged.listen((position) {
       _position = position;
-      _events.add(null);
+      _emit();
     });
     _player.onDurationChanged.listen((duration) {
       _duration = duration;
-      _events.add(null);
+      _emit();
     });
     _player.onPlayerComplete.listen((_) {
       _isPlaying = false;
       _position = _duration;
       _stopFallbackTicker();
-      _events.add(null);
+      _emit();
     });
   }
 
@@ -57,7 +58,7 @@ class VoicePlayerService {
       milliseconds: (pcmSamples.length * 1000) ~/ sampleRateHz,
     );
     _playbackStartedAt = DateTime.now();
-    _events.add(null);
+    _emit();
 
     final wavBytes = _buildWav(pcmSamples, sampleRate: sampleRateHz);
     final tmpDir = await getTemporaryDirectory();
@@ -70,14 +71,14 @@ class VoicePlayerService {
     try {
       _isPlaying = true;
       _startFallbackTicker();
-      _events.add(null);
+      _emit();
       await _player.play(DeviceFileSource(file.path));
       debugPrint('🔊 [VoicePlayer] play() returned (audio playing)');
     } catch (e, st) {
       debugPrint('❌ [VoicePlayer] play() error: $e\n$st');
       _isPlaying = false;
       _stopFallbackTicker();
-      _events.add(null);
+      _emit();
     }
   }
 
@@ -88,13 +89,20 @@ class VoicePlayerService {
     _position = Duration.zero;
     _playbackStartedAt = null;
     _stopFallbackTicker();
-    _events.add(null);
+    _emit();
   }
 
   void dispose() {
+    _isDisposed = true;
     _stopFallbackTicker();
     _events.close();
     _player.dispose();
+  }
+
+  void _emit() {
+    if (!_isDisposed) {
+      _events.add(null);
+    }
   }
 
   void _startFallbackTicker() {
@@ -107,7 +115,7 @@ class VoicePlayerService {
       final clamped = elapsed > _duration ? _duration : elapsed;
       if (clamped > _position) {
         _position = clamped;
-        _events.add(null);
+        _emit();
       }
     });
   }
