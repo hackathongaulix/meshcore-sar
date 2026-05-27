@@ -12,6 +12,9 @@ class NotificationService {
   factory NotificationService() => _instance;
   NotificationService._internal();
 
+  static const bool _skipPermissionRequests = bool.fromEnvironment(
+    'MESHCORE_SCREENSHOTS',
+  );
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
   static const String _prefMessagesEnabled = 'notifications_messages_enabled';
@@ -90,9 +93,9 @@ class NotificationService {
 
       // iOS initialization settings
       final darwinSettings = DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: !_skipPermissionRequests,
+        requestBadgePermission: !_skipPermissionRequests,
+        requestSoundPermission: !_skipPermissionRequests,
       );
 
       // Combined initialization settings
@@ -114,7 +117,11 @@ class NotificationService {
       }
 
       // Request permissions
-      await _requestPermissions();
+      if (_skipPermissionRequests) {
+        _permissionGranted = true;
+      } else {
+        await _requestPermissions();
+      }
       await _loadPreferences();
 
       // Create notification channels (Android)
@@ -327,6 +334,8 @@ class NotificationService {
     String? notes,
     AppLocalizations? localizations,
   }) async {
+    if (_skipPermissionRequests) return;
+
     if (!_isInitialized) {
       debugPrint(
         '⚠️ [NotificationService] Not initialized, skipping notification',
@@ -509,6 +518,8 @@ class NotificationService {
     String? channelName,
     AppLocalizations? localizations,
   }) async {
+    if (_skipPermissionRequests) return;
+
     if (!_isInitialized) {
       debugPrint(
         '⚠️ [NotificationService] Not initialized, skipping notification',
@@ -672,6 +683,8 @@ class NotificationService {
     required String downloadUrl,
     AppLocalizations? localizations,
   }) async {
+    if (_skipPermissionRequests) return;
+
     if (!_isInitialized) {
       debugPrint(
         '⚠️ [NotificationService] Not initialized, skipping notification',
@@ -772,6 +785,8 @@ class NotificationService {
     required double batteryPercent,
     required bool isCurrentDevice,
   }) async {
+    if (_skipPermissionRequests) return false;
+
     if (!_isInitialized) {
       debugPrint(
         '⚠️ [NotificationService] Not initialized, skipping notification',
@@ -863,6 +878,8 @@ class NotificationService {
     required String contactKey,
     String? contactName,
   }) async {
+    if (_skipPermissionRequests) return false;
+
     if (!_isInitialized) return false;
     if (!_permissionGranted) return false;
     if (!_discoveryNotificationsEnabled) return false;

@@ -73,6 +73,8 @@ GoogleService-Info.plist
 **/fastlane/.env
 **/fastlane/.env.*
 fastlane/README.md
+ios/.bundle/
+ios/vendor/
 
 # Play Store release assets & scripts
 play-store/

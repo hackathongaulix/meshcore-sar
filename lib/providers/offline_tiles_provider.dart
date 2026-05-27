@@ -56,6 +56,7 @@ class OfflineTilesProvider extends ChangeNotifier {
   TileDownloadService? _downloadService;
   StreamSubscription<TileDownloadEvent>? _downloadSubscription;
   StreamSubscription<Set<TilePeer>>? _peersSubscription;
+  bool _isDisposed = false;
 
   // Drawing state
   DrawingMode _drawingMode = DrawingMode.none;
@@ -436,7 +437,9 @@ class OfflineTilesProvider extends ChangeNotifier {
     _peersSubscription = null;
     await _sharing.stopPeerDiscovery();
     _discoveredPeers = {};
-    notifyListeners();
+    if (!_isDisposed) {
+      notifyListeners();
+    }
   }
 
   void addManualPeer(String ipAddress) {
@@ -569,6 +572,7 @@ class OfflineTilesProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _isDisposed = true;
     _downloadSubscription?.cancel();
     _downloadService?.dispose();
     _peersSubscription?.cancel();

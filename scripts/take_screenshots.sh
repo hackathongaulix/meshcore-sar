@@ -14,12 +14,18 @@ NC='\033[0m' # No Color
 
 # Configuration
 OUTPUT_DIR="screenshots"
+IOS_OUTPUT_DIR="ios/fastlane/screenshots/en-US"
+IOS_SCREENSHOT_WIDTH=1284
+IOS_SCREENSHOT_HEIGHT=2778
+IPAD_SCREENSHOT_WIDTH=2048
+IPAD_SCREENSHOT_HEIGHT=2732
 INTEGRATION_TEST="integration_test/app_screenshots_test.dart"
 
 # Device configurations for App Store screenshots
 # iOS devices (required sizes: 6.7", 6.5", 5.5")
 IOS_DEVICES=(
-  "iPhone Air"         # 6.3" - 1206x2622 (newer large format)
+  "iPhone 17 Pro Max"  # 6.9" - App Store large phone format
+  "iPad Pro 13-inch (M5)"  # 13" - required iPad format
 )
 
 # Android devices (phone + tablet recommended)
@@ -45,7 +51,7 @@ mkdir -p "$OUTPUT_DIR"
 # Function to list available devices
 list_devices() {
   echo -e "${YELLOW}📱 Available iOS Simulators:${NC}"
-  xcrun simctl list devices available | grep "iPhone" | grep -v "unavailable"
+  xcrun simctl list devices available | grep -E "iPhone|iPad" | grep -v "unavailable"
   echo ""
   echo -e "${YELLOW}🤖 Available Android Emulators:${NC}"
   emulator -list-avds
@@ -74,22 +80,45 @@ take_ios_screenshots() {
 
   echo -e "${BLUE}   Device ID: $device_id${NC}"
 
-  # Boot the simulator if not already booted
+  xcrun simctl shutdown "$device_id" 2>/dev/null || true
   xcrun simctl boot "$device_id" 2>/dev/null || true
   sleep 3
+  xcrun simctl uninstall "$device_id" com.meshcore.sar.meshcoreSarApp 2>/dev/null || true
+  xcrun simctl privacy "$device_id" grant notifications com.meshcore.sar.meshcoreSarApp 2>/dev/null || true
+  xcrun simctl privacy "$device_id" grant location com.meshcore.sar.meshcoreSarApp 2>/dev/null || true
 
   # Create device-specific output directory
-  local device_dir="$OUTPUT_DIR/ios/${device_name// /_}"
+  local device_dir="$IOS_OUTPUT_DIR"
+  local screenshot_prefix=""
+  local screenshot_width="$IOS_SCREENSHOT_WIDTH"
+  local screenshot_height="$IOS_SCREENSHOT_HEIGHT"
+  local remove_pattern="[0-9][0-9]-*.png"
+  if [[ "$device_name" == *"iPad"* ]]; then
+    screenshot_prefix="ipad-"
+    screenshot_width="$IPAD_SCREENSHOT_WIDTH"
+    screenshot_height="$IPAD_SCREENSHOT_HEIGHT"
+    remove_pattern="ipad-*.png"
+  fi
   mkdir -p "$device_dir"
+  rm -f "$device_dir"/$remove_pattern
 
   # Run the integration test
-  flutter drive \
+  SCREENSHOT_OUTPUT_DIR="$device_dir" flutter drive \
     --driver=test_driver/integration_test.dart \
     --target="$INTEGRATION_TEST" \
     -d "$device_id" \
+    --dart-define=MESHCORE_SCREENSHOTS=true \
+    --dart-define=SCREENSHOT_PREFIX="$screenshot_prefix" \
     --screenshot="$device_dir" || {
-    echo -e "${YELLOW}⚠️  Warning: Screenshot capture had issues on $device_name${NC}"
+    echo -e "${RED}❌ Screenshot capture failed on $device_name${NC}"
+    return 1
   }
+
+  if command -v sips >/dev/null 2>&1; then
+    for screenshot in "$device_dir"/$remove_pattern; do
+      sips -z "$screenshot_height" "$screenshot_width" "$screenshot" >/dev/null
+    done
+  fi
 
   echo -e "${GREEN}✅ Completed: $device_name${NC}"
   echo ""
@@ -129,12 +158,14 @@ take_android_screenshots() {
   mkdir -p "$device_dir"
 
   # Run the integration test
-  flutter drive \
+  SCREENSHOT_OUTPUT_DIR="$device_dir" flutter drive \
     --driver=test_driver/integration_test.dart \
     --target="$INTEGRATION_TEST" \
     -d emulator-5554 \
+    --dart-define=MESHCORE_SCREENSHOTS=true \
     --screenshot="$device_dir" || {
-    echo -e "${YELLOW}⚠️  Warning: Screenshot capture had issues on $device_name${NC}"
+    echo -e "${RED}❌ Screenshot capture failed on $device_name${NC}"
+    return 1
   }
 
   # Kill emulator
@@ -192,16 +223,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Create test driver if it doesn't exist
+# Ensure test driver exists
 DRIVER_FILE="test_driver/integration_test.dart"
-mkdir -p test_driver
 if [ ! -f "$DRIVER_FILE" ]; then
-  echo -e "${YELLOW}📝 Creating integration test driver...${NC}"
-  cat > "$DRIVER_FILE" << 'EOF'
-import 'package:integration_test/integration_test_driver.dart';
-
-Future<void> main() => integrationDriver();
-EOF
+  echo -e "${RED}❌ Error: Integration test driver not found at $DRIVER_FILE${NC}"
+  exit 1
 fi
 
 # Take screenshots
@@ -239,10 +265,18 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║  ✅ Screenshot Capture Complete!         ║${NC}"
 echo -e "${GREEN}╔═══════════════════════════════════════════╗${NC}"
 echo ""
-echo -e "${BLUE}📁 Screenshots saved to: $OUTPUT_DIR${NC}"
+if [ "$PLATFORM" = "ios" ]; then
+  echo -e "${BLUE}📁 Screenshots saved to: $IOS_OUTPUT_DIR${NC}"
+else
+  echo -e "${BLUE}📁 Screenshots saved to: $OUTPUT_DIR${NC}"
+fi
 echo ""
 echo -e "${YELLOW}Next steps:${NC}"
-echo -e "  1. Review screenshots in $OUTPUT_DIR"
+if [ "$PLATFORM" = "ios" ]; then
+  echo -e "  1. Review screenshots in $IOS_OUTPUT_DIR"
+else
+  echo -e "  1. Review screenshots in $OUTPUT_DIR"
+fi
 echo -e "  2. Organize by device size for App Store"
 echo -e "  3. Add captions and localization if needed"
 echo ""

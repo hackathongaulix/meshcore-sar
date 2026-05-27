@@ -50,6 +50,9 @@ class MeshCoreSarApp extends StatefulWidget {
 }
 
 class _MeshCoreSarAppState extends State<MeshCoreSarApp> {
+  static const bool _isScreenshotRun = bool.fromEnvironment(
+    'MESHCORE_SCREENSHOTS',
+  );
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   AppThemeMode _themeMode = AppThemeMode.system;
   Locale? _locale;
@@ -87,7 +90,9 @@ class _MeshCoreSarAppState extends State<MeshCoreSarApp> {
     _pendingNotificationPayload = NotificationService().consumeLaunchPayload();
 
     // Check if we need to request location permissions
-    await _checkLocationPermissions();
+    if (!_isScreenshotRun) {
+      await _checkLocationPermissions();
+    }
 
     // Check for app updates (Android only) - runs in background
     // Shows notification if update is available
